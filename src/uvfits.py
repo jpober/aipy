@@ -55,6 +55,10 @@ class UV():
         self.status = status
         self.it = n.nditer(self.hdulist[0].data)
         if self.status == 'old':
+            #XXX see how relevant keeping NANTS, NTIMES, NBLS is
+            self.nants = self.hdulist[1].header['NAXIS2']
+            self.nbls = (self.nants * (self.nants-1))/2 #generically true, or can bls be flagged?
+            self.ntimes = self.hdulist[0].header['GCOUNT']/self.nbls
             self.npols = self.hdulist[0].header['NAXIS3'] #XXX how generic?
             self.pol = pol2str[self.hdulist[0].header['CRVAL3'] + self.hdulist[0].header['CDELT3']]
             self.iterindex = 0
@@ -109,8 +113,21 @@ class UV():
             include If true, the data is selected. If false, the data is
                     discarded. Ignored for 'and','or','clear'."""
         if name == 'antennae':
-            n1 += 1; n2 += 1
-        self._select(name, float(n1), float(n2), int(include))
+            jarr = (self.hdulist[0].data['BASELINE'] % 256 - 1).astype(int)
+            iarr = ((self.hdulist[0].data['BASELINE']  - (jarr+1))/256 - 1).astype(int)
+            if n1 != -1: iinds = n.where(iarr == n1)
+            else: iinds = n.arange(len(iarr))
+            if n2 != -1: jinds = n.where(jarr == n2)
+            else: jinds = n.arange(len(jarr))
+            inds = n.intersect1d(iinds,jinds)
+            self.hdulist[0].data = self.hdulist[0].data[inds]
+        elif name == 'time':
+            self.hdulist[0].data = self.hdulist[0].data[n1*self.nbls:n2*self.nbls]
+        elif name == 'polarization':
+            print 'Polarization select not yet functional' #XXX may be hard with uvfits
+        else:
+            print '%s is not a valid option for the uvfits module' % name           
+        self.it = n.nditer(self.hdulist[0].data)
     def read(self, raw=False):
         """Return the next data record. 'raw' causes data and flags 
         to be returned seperately."""
@@ -194,6 +211,8 @@ class UV():
     def add_var(self, name, type):
         """Add a variable of the specified type to a UV file."""
         self.vartable[name] = type
+    def rewind(): #XXX needs to be defined
+        print "You haven't written this code yet."
 
 def bl2ij(bl):
     j = int(bl % 256 - 1)
